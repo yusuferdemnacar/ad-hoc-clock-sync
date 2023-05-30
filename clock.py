@@ -68,7 +68,7 @@ def update_plot(frames, ax1, ax2, clock_queues, diff_queues, start, clock_period
             xdata = np.append(xdata, t - start + (clock_period / 2))
             ydata = np.append(ydata, 0)
             line.set_data(xdata, ydata)
-            ax1.set_xlim(xdata[-1] - 4 * clock_period, xdata[-1] + clock_period / 2)
+            ax1.set_xlim(xdata[-1] - 4.5 * clock_period, xdata[-1] + clock_period / 2)
 
     for diff_queue in diff_queues:
         line = ax2.lines[diff_queues.index(diff_queue)]
@@ -78,7 +78,7 @@ def update_plot(frames, ax1, ax2, clock_queues, diff_queues, start, clock_period
             xdata = np.append(xdata, time.time() - start)
             ydata = np.append(ydata, diff * 100)
             line.set_data(xdata, ydata)
-            ax2.set_xlim(xdata[-1] - 80 * clock_period, xdata[-1] + 10 * clock_period)
+            ax2.set_xlim(xdata[-1] - 90 * clock_period, xdata[-1] + 10 * clock_period)
 
 
 def plot(clock_period, clock_queues, diff_queues):
@@ -112,9 +112,6 @@ def plot(clock_period, clock_queues, diff_queues):
     start = time.time()
 
     anim = animation.FuncAnimation(fig, update_plot, fargs=(ax1, ax2, clock_queues, diff_queues, start, clock_period), interval=clock_period/4, blit=False, cache_frame_data=False)
-
-    mng = plt.get_current_fig_manager()
-    mng.resize(*mng.window.maxsize())
 
     plt.show()
     
