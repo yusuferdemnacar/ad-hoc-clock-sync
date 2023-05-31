@@ -5,11 +5,12 @@ from matplotlib import pyplot as plt
 from matplotlib import animation
 import numpy as np
 import random
+import socket
 
 class Clock(mp.Process):
 
     def __init__(self, id, clock_period, broadcast_number, alpha, clock_queue, receive_clock_queue, broadcast_clock_queue, diff_queue):
-        super(Clock, self).__init__()
+        super(Clock, self).__init__(daemon=True)
         self.id = id
         self.clock_period = clock_period
         self.broadcast_number = broadcast_number
@@ -40,82 +41,44 @@ class Clock(mp.Process):
                 self.broadcast_clock_queue.put(rising_edge)
                 i = 0
             
-class Communicator(mp.Process):
+class Listener(mp.Process):
 
-    def __init__(self, id, receive_clock_queues, broadcast_clock_queue):
-        super(Communicator, self).__init__()
+    def __init__(self, id, queue, port):
+        super(Listener, self).__init__(daemon=True)
         self.id = id
-        self.receive_clock_queues = receive_clock_queues
-        self.broadcast_clock_queue = broadcast_clock_queue
+        self.queue = queue
+        self.port = port
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(('', self.port))
+        print('Listening on port {}'.format(self.port))
+
+    def run(self):
+
+        while True:
+            data, addr = self.sock.recvfrom(1024)
+            data = float(data.decode('utf-8'))
+            if self.id != addr[0]:
+                self.queue.put(data)
+            else:
+                print(self.port, data)
+
+class Sender(mp.Process):
+
+    def __init__(self, id, queue, port):
+        super(Sender, self).__init__(daemon=True)
+        self.id = id
+        self.queue = queue
+        self.port = port
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
     def run(self):
         while True:
-            s = self.broadcast_clock_queue.get()
-            for receive_clock_queue in self.receive_clock_queues:
-                if self.receive_clock_queues.index(receive_clock_queue) != self.id:
-                    receive_clock_queue.put(s)
-
-def update_plot(frames, ax1, ax2, clock_queues, diff_queues, start, clock_period):
-
-    for clock_queue in clock_queues:
-        line = ax1.lines[clock_queues.index(clock_queue)]
-        xdata, ydata = line.get_data()
-        if not clock_queue.empty():
-            t = clock_queue.get()
-            xdata = np.append(xdata, t - start)
-            ydata = np.append(ydata, 1)
-            xdata = np.append(xdata, t - start + (clock_period / 2))
-            ydata = np.append(ydata, 0)
-            line.set_data(xdata, ydata)
-            ax1.set_xlim(xdata[-1] - 4.5 * clock_period, xdata[-1] + clock_period / 2)
-
-    for diff_queue in diff_queues:
-        line = ax2.lines[diff_queues.index(diff_queue)]
-        xdata, ydata = line.get_data()
-        if not diff_queue.empty():
-            diff = diff_queue.get()
-            xdata = np.append(xdata, time.time() - start)
-            ydata = np.append(ydata, diff * 100)
-            line.set_data(xdata, ydata)
-            ax2.set_xlim(xdata[-1] - 90 * clock_period, xdata[-1] + 10 * clock_period)
-
-def plot(clock_period, clock_queues, diff_queues):
-
-    fig = plt.figure()
-    ax1 = fig.add_subplot(2,1,1)
-    ax2 = fig.add_subplot(2,1,2)
-
-    ax1.set_ylim(-0.1, 1.1)
-    ax1.set_xlabel('Time (s)')
-    ax1.set_ylabel('Value')
-    ax1.set_title('Clocks')
-    ax1.grid(True)
-    ax1.xaxis.set_tick_params(rotation=45)
-
-    ax2.set_ylim(-110, 110)
-    ax2.set_xlabel('Time (s)')
-    ax2.set_ylabel('% of clock period')
-    ax2.set_title('Average Difference')
-    ax2.grid(True)
-    ax2.xaxis.set_tick_params(rotation=45)
-
-    fig.tight_layout()
-
-    for _ in range(len(clock_queues)):
-        ax1.step([], [], lw=2, where='post')[0]
-
-    for _ in range(len(diff_queues)):
-        ax2.plot([], [], lw=2)[0]
-
-    start = time.time()
-
-    anim = animation.FuncAnimation(fig, update_plot, fargs=(ax1, ax2, clock_queues, diff_queues, start, clock_period), interval = 100, blit=False, cache_frame_data=False)
-
-    plt.show()
+            data = self.queue.get()
+            self.sock.sendto(str(data).encode('utf-8'), ('<broadcast>', self.port))
+            print('Sent {} to port {}'.format(data, self.port))
     
 if __name__ == '__main__':
-
-    n = 4
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--clockperiod', '-clkp', type=float, help='Clock period in seconds', default=1.0)
@@ -127,40 +90,29 @@ if __name__ == '__main__':
     broadcast_number = args.broadcastnumber
     alpha = args.alpha
 
-    clock_queues = []
-    for i in range(n):
-        clock_queues.append(mp.Queue())
+    host = socket.gethostname()
+    ip = socket.gethostbyname(host)
 
-    broadcast_clock_queues = []
-    for i in range(n):
-        broadcast_clock_queues.append(mp.Queue())
+    clock_queue = mp.Queue()
+    diff_queue = mp.Queue()
+    broadcast_queue = mp.Queue()
+    receive_queue = mp.Queue()
 
-    receive_clock_queues = []
-    for i in range(n):
-        receive_clock_queues.append(mp.Queue())
+    clock = Clock(ip, clock_period, broadcast_number, alpha, clock_queue, receive_queue, broadcast_queue, diff_queue)
+    broadcast_listener = Listener(ip, broadcast_queue, 16320)
+    broadcast_sender = Sender(ip, broadcast_queue, 16320)
+    clock_sender = Sender(ip, clock_queue, 16321)
+    diff_sender = Sender(ip, diff_queue, 16322)
 
-    diff_queues = []
-    for i in range(n):
-        diff_queues.append(mp.Queue())
 
-    clocks = []
-    for i in range(n):
-        clocks.append(Clock(i, clock_period, broadcast_number, alpha, clock_queues[i], receive_clock_queues[i], broadcast_clock_queues[i], diff_queues[i]))
+    clock.start()
+    broadcast_listener.start()
+    broadcast_sender.start()
+    clock_sender.start()
+    diff_sender.start()
 
-    communicators = []
-    for i in range(n):
-        communicators.append(Communicator(i, receive_clock_queues, broadcast_clock_queues[i]))
-
-    plotter = mp.Process(target=plot, args=(clock_period, clock_queues, diff_queues))
-
-    plotter.start()
-    for clock in clocks:
-        clock.start()
-        time.sleep(random.random() * clock_period)
-    for communicator in communicators:
-        communicator.start()
-    plotter.join()
-    for clock in clocks:
-        clock.join()
-    for communicator in communicators:
-        communicator.join()
+    clock.join()
+    broadcast_listener.join()
+    broadcast_sender.join()
+    clock_sender.join()
+    diff_sender.join()
