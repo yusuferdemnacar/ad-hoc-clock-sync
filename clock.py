@@ -69,6 +69,8 @@ class Sender(mp.Process):
     def run(self):
         while True:
             data = self.queue.get()
+            while not self.queue.empty():
+                pass
             self.sock.sendto(str(data).encode('utf-8'), ('<broadcast>', self.port))
     
 if __name__ == '__main__':
