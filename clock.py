@@ -28,7 +28,7 @@ class Clock(mp.Process):
                 self.receive_clock_queue.put(None)
                 time_stamps = list(iter(self.receive_clock_queue.get, None))
                 diff = sum([(((time_stamp - rising_edge) % self.clock_period) - self.clock_period) if abs(((time_stamp - rising_edge) % self.clock_period) - self.clock_period) < self.clock_period / 2 else ((time_stamp - rising_edge) % self.clock_period) for time_stamp in time_stamps]) / len(time_stamps)
-                self.diff_queue.put(diff / (self.clock_period / 2))
+                self.diff_queue.put(diff)
                 shift = self.alpha * diff
             i = i + 1
             time.sleep((op_start - time.perf_counter()) % self.clock_period + shift)

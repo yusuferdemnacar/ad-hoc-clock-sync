@@ -27,10 +27,11 @@ class Listener(mp.Process):
 
 class ClockPlotter(mp.Process):
 
-    def __init__(self, id, clock_period, clock_queue, diff_queue):
+    def __init__(self, id, clock_period, diff_mode, clock_queue, diff_queue):
         super(ClockPlotter, self).__init__(daemon=True)
         self.id = id
         self.clock_period = clock_period
+        self.diff_mode = diff_mode
         self.clock_queue = clock_queue
         self.diff_queue = diff_queue
         self.known_ips = OrderedDict()
@@ -48,7 +49,6 @@ class ClockPlotter(mp.Process):
 
         self.ax2.set_ylim(-110, 110)
         self.ax2.set_xlabel('Time (s)')
-        self.ax2.set_ylabel('% of clock period')
         self.ax2.set_title('Average Difference to Other Clocks')
         self.ax2.grid(True)
         self.ax2.xaxis.set_tick_params(rotation=45)
@@ -113,7 +113,12 @@ class ClockPlotter(mp.Process):
                 line = self.ax2.get_lines()[list(self.known_ips.keys()).index(diff_time_stamp[0])]
                 xdata, ydata = line.get_data()
                 xdata = np.append(xdata, time.time() - start)
-                ydata = np.append(ydata, diff_time_stamp[1] * 100)
+                if self.diff_mode == 'rel':
+                    ydata = np.append(ydata, (diff_time_stamp[1] / self.clock_period * 100))
+                    self.ax2.set_ylabel('% of Clock Period')
+                elif self.diff_mode == 'abs':
+                    ydata = np.append(ydata, diff_time_stamp[1])
+                    self.ax2.set_ylabel('Seconds (s)')
                 if len(xdata) > int(45 / self.clock_period):
                     xdata = xdata[1:]
                     ydata = ydata[1:]
@@ -127,7 +132,11 @@ class ClockPlotter(mp.Process):
                         min = np.min(limit_ydata)
                     if (len(limit_ydata) > 0) and (np.max(limit_ydata) > max):
                         max = np.max(limit_ydata)
-                self.ax2.set_ylim(min - 10, max + 10)
+                if self.diff_mode == 'rel':
+                    self.ax2.set_ylim(min - 10, max + 10)
+                elif self.diff_mode == 'abs':
+                    ydata = np.append(ydata, diff_time_stamp[1])
+                    self.ax2.set_ylim(min - abs(min) / 5, max  + abs(max) / 5)
             except Exception as e:
                 print(e)
                 pass
@@ -143,8 +152,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--clockperiod', '-clkp', type=float, help='Clock period in seconds', default=1.0)
+    parser.add_argument('--diffmode', '-dm', type=str, help='Diff mode', default='rel', choices=['rel', 'abs'])
     args = parser.parse_args()
     clock_period = args.clockperiod
+    diff_mode = args.diffmode
 
     clock_queue = mp.Queue()
     diff_queue = mp.Queue()
@@ -152,7 +163,7 @@ if __name__ == '__main__':
     clock_listener = Listener(0, clock_queue, clock_port)
     diff_listener = Listener(1, diff_queue, diff_port)
 
-    clock_plotter = ClockPlotter(0, clock_period, clock_queue, diff_queue)
+    clock_plotter = ClockPlotter(0, clock_period, diff_mode, clock_queue, diff_queue)
 
     clock_listener.start()
     diff_listener.start()
