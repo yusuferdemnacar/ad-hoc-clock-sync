@@ -94,11 +94,10 @@ if __name__ == '__main__':
     receive_queue = mp.Queue()
 
     clock = Clock(ip, clock_period, broadcast_number, alpha, clock_queue, receive_queue, broadcast_queue, diff_queue)
-    broadcast_listener = Listener(ip, receive_queue, 16320)
-    broadcast_sender = Sender(ip, broadcast_queue, 16320)
-    clock_sender = Sender(ip, clock_queue, 16321)
-    diff_sender = Sender(ip, diff_queue, 16322)
-
+    broadcast_listener = Listener(ip, 16320, receive_queue)
+    broadcast_sender = Sender(ip, 16320, broadcast_queue)
+    clock_sender = Sender(ip, 16321, clock_queue)
+    diff_sender = Sender(ip, 16322, diff_queue)
 
     clock.start()
     broadcast_listener.start()
