@@ -72,6 +72,15 @@ class Sender(mp.Process):
             while not self.queue.empty():
                 pass
             self.sock.sendto(str(data).encode('utf-8'), ('<broadcast>', self.port))
+
+def get_ip():
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    ip = s.getsockname()[0]
+    s.close()
+
+    return ip
     
 if __name__ == '__main__':
 
@@ -85,8 +94,7 @@ if __name__ == '__main__':
     broadcast_number = args.broadcastnumber
     alpha = args.alpha
 
-    host = socket.gethostname()
-    ip = socket.gethostbyname(host)
+    ip = get_ip()
 
     clock_queue = mp.Queue()
     diff_queue = mp.Queue()
