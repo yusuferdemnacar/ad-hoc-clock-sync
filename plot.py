@@ -4,6 +4,7 @@ import numpy as np
 import multiprocessing as mp
 import time
 import socket
+import argparse
 
 class Listener(mp.Process):
 
@@ -25,9 +26,10 @@ class Listener(mp.Process):
 
 class ClockPlotter(mp.Process):
 
-    def __init__(self, id, clock_queue, diff_queue):
+    def __init__(self, id, clock_period, clock_queue, diff_queue):
         super(ClockPlotter, self).__init__(daemon=True)
         self.id = id
+        self.clock_period = clock_period
         self.clock_queue = clock_queue
         self.diff_queue = diff_queue
         self.known_ips = []
@@ -74,41 +76,43 @@ class ClockPlotter(mp.Process):
         for clock_time_stamp in clock_time_stamps:
             if clock_time_stamp[0] not in self.known_ips:
                 self.known_ips.append(clock_time_stamp[0])
-                self.ax1.step([], [], label=clock_time_stamp[0])
-                self.ax2.step([], [], label=clock_time_stamp[0])
-
-        for diff_time_stamp in diff_time_stamps:
-            if diff_time_stamp[0] not in self.known_ips:
-                self.known_ips.append(diff_time_stamp[0])
-                self.ax1.plot([], [], label=diff_time_stamp[0])
-                self.ax2.plot([], [], label=diff_time_stamp[0])
+                self.ax1.step([], [], where='pre')
+                self.ax2.plot([], [])
 
         for clock_time_stamp in clock_time_stamps:
             line = self.ax1.lines[self.known_ips.index(clock_time_stamp[0])]
             xdata, ydata = line.get_data()
             xdata = np.append(xdata, clock_time_stamp[1])
-            ydata = np.append(ydata, 1)
-            xdata = np.append(xdata, clock_time_stamp[1] + 0.5)
             ydata = np.append(ydata, 0)
+            xdata = np.append(xdata, clock_time_stamp[1] + self.clock_period / 2)
+            ydata = np.append(ydata, 1)
             line.set_data(xdata, ydata)
-            self.ax1.set_xlim(xdata[-1] - 4.5, xdata[-1] + 0.5)
+            self.ax1.set_xlim(xdata[-1] - 4.5 * self.clock_period, xdata[-1] + 0.5 * self.clock_period)
 
         for diff_time_stamp in diff_time_stamps:
-            line = self.ax2.lines[self.known_ips.index(diff_time_stamp[0])]
-            xdata, ydata = line.get_data()
-            xdata = np.append(xdata, time.time())
-            ydata = np.append(ydata, diff_time_stamp[1] * 100)
-            line.set_data(xdata, ydata)
-            self.ax2.set_xlim(xdata[-1] - 90, xdata[-1] + 10)
+            try:
+                line = self.ax2.lines[self.known_ips.index(diff_time_stamp[0])]
+                xdata, ydata = line.get_data()
+                xdata = np.append(xdata, time.time())
+                ydata = np.append(ydata, diff_time_stamp[1] * 100)
+                line.set_data(xdata, ydata)
+                self.ax2.set_xlim(xdata[-1] - 45, xdata[-1] + 5)
+            except:
+                pass
 
-        self.ax1.legend()
-        self.ax2.legend()
-
+        self.ax1.legend(self.known_ips, loc='upper left')
+        self.ax2.legend(self.known_ips, loc='upper left')
 
 if __name__ == '__main__':
 
     clock_port = 16321
     diff_port = 16322
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--clockperiod', '-clkp', type=float, help='Clock period in seconds', default=1.0)
+    args = parser.parse_args()
+    clock_period = args.clockperiod
 
     clock_queue = mp.Queue()
     diff_queue = mp.Queue()
@@ -116,7 +120,7 @@ if __name__ == '__main__':
     clock_listener = Listener(0, clock_queue, clock_port)
     diff_listener = Listener(1, diff_queue, diff_port)
 
-    clock_plotter = ClockPlotter(0, clock_queue, diff_queue)
+    clock_plotter = ClockPlotter(0, clock_period, clock_queue, diff_queue)
 
     clock_listener.start()
     diff_listener.start()

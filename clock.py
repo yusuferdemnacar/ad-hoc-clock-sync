@@ -1,10 +1,6 @@
 import time
 import argparse
 import multiprocessing as mp
-from matplotlib import pyplot as plt
-from matplotlib import animation
-import numpy as np
-import random
 import socket
 
 class Clock(mp.Process):
@@ -43,40 +39,37 @@ class Clock(mp.Process):
             
 class Listener(mp.Process):
 
-    def __init__(self, id, queue, port):
+    def __init__(self, ip, port, queue):
         super(Listener, self).__init__(daemon=True)
-        self.id = id
-        self.queue = queue
+        self.ip = ip
         self.port = port
+        self.queue = queue
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind(('', self.port))
-        print('Listening on port {}'.format(self.port))
+        self.sock.bind((self.ip, self.port))
 
     def run(self):
 
         while True:
             data, addr = self.sock.recvfrom(1024)
             data = float(data.decode('utf-8'))
-            if self.id != addr[0]:
+            if self.ip != addr[0]:
                 self.queue.put(data)
-            else:
-                print(self.port, data)
 
 class Sender(mp.Process):
 
-    def __init__(self, id, queue, port):
+    def __init__(self, ip, port, queue):
         super(Sender, self).__init__(daemon=True)
-        self.id = id
-        self.queue = queue
+        self.ip = ip
         self.port = port
+        self.queue = queue
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind((self.ip, 0))
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
     def run(self):
         while True:
             data = self.queue.get()
             self.sock.sendto(str(data).encode('utf-8'), ('<broadcast>', self.port))
-            print('Sent {} to port {}'.format(data, self.port))
     
 if __name__ == '__main__':
 
@@ -99,7 +92,7 @@ if __name__ == '__main__':
     receive_queue = mp.Queue()
 
     clock = Clock(ip, clock_period, broadcast_number, alpha, clock_queue, receive_queue, broadcast_queue, diff_queue)
-    broadcast_listener = Listener(ip, broadcast_queue, 16320)
+    broadcast_listener = Listener(ip, receive_queue, 16320)
     broadcast_sender = Sender(ip, broadcast_queue, 16320)
     clock_sender = Sender(ip, clock_queue, 16321)
     diff_sender = Sender(ip, diff_queue, 16322)
