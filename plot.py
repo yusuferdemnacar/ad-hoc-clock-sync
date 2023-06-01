@@ -85,6 +85,8 @@ class ClockPlotter(mp.Process):
         for ip in list(self.known_ips.keys()):
             if ip not in [clock_time_stamp[0] for clock_time_stamp in clock_time_stamps]:
                 self.known_ips[ip] = self.known_ips[ip] + 1
+            else:
+                self.known_ips[ip] = 0
             if self.known_ips[ip] > 40:
                 line_index = list(self.known_ips.keys()).index(ip)
                 del self.known_ips[ip]
